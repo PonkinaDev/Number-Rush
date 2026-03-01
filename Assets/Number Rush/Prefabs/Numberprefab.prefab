@@ -276,9 +276,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   label: {fileID: 8709491194933495750}
   bg: {fileID: 7393801471616101369}
-  normalColor: {r: 0.06, g: 0.13, b: 0.24, a: 1}
-  hitColor: {r: 0.91, g: 0.27, b: 0.37, a: 1}
-  expiredColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
 --- !u!1 &9019134742618678524
 GameObject:
   m_ObjectHideFlags: 0

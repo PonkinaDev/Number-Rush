@@ -1,87 +1,112 @@
-using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Gestiona los tres paneles: MainMenu, GameHUD y GameOver.
-/// Todos los campos se asignan desde el Inspector.
-/// </summary>
 public class UIManager : MonoBehaviour
 {
-    // ── Paneles ─────────────────────────────────────────────────────────────
+    // UI Panels
     [Header("Paneles")]
-    [SerializeField] private GameObject panelMainMenu;
+    [SerializeField] private GameObject panelMenu;
     [SerializeField] private GameObject panelHUD;
     [SerializeField] private GameObject panelGameOver;
-    [SerializeField] private GameObject panelEmailStatus;   // panel pequeño de estado
 
-    // ── Main Menu ───────────────────────────────────────────────────────────
-    [Header("Main Menu")]
-    [SerializeField] private TMP_InputField inputPlayerName;
-    [SerializeField] private Button         btnPlay;
+    // Main Menu references
+    [Header("Menú principal")]
+    [SerializeField] private TMP_InputField  inputName;
+    [SerializeField] private TMP_InputField  inputEmail;
+    [SerializeField] private TextMeshProUGUI txtMenuError;
+    [SerializeField] private Button          btnPlay;
 
-    // ── HUD ─────────────────────────────────────────────────────────────────
-    [Header("HUD (durante partida)")]
+    // In-game HUD references
+    [Header("HUD")]
     [SerializeField] private TextMeshProUGUI txtScore;
     [SerializeField] private TextMeshProUGUI txtTimer;
     [SerializeField] private Slider          timerSlider;
 
-    // ── Game Over ───────────────────────────────────────────────────────────
+    // Game Over screen statistics and actions
     [Header("Game Over")]
     [SerializeField] private TextMeshProUGUI txtFinalScore;
     [SerializeField] private TextMeshProUGUI txtHits;
     [SerializeField] private TextMeshProUGUI txtAccuracy;
     [SerializeField] private TextMeshProUGUI txtTime;
-    [SerializeField] private TMP_InputField  inputEmail;
-    [SerializeField] private Button          btnSendEmail;
+    [SerializeField] private TextMeshProUGUI txtEmailStatus;
     [SerializeField] private Button          btnPlayAgain;
     [SerializeField] private Button          btnMenu;
 
-    // ── Panel de estado email ────────────────────────────────────────────────
-    [Header("Estado del correo")]
-    [SerializeField] private TextMeshProUGUI txtEmailStatus;
-    [SerializeField] private Image           imgStatusIcon;
-    [SerializeField] private Color           colorSending = new Color(1f, 0.8f, 0f);
-    [SerializeField] private Color           colorSuccess = new Color(0.2f, 0.9f, 0.4f);
-    [SerializeField] private Color           colorError   = new Color(0.9f, 0.2f, 0.2f);
-
-    // ── Referencias ─────────────────────────────────────────────────────────
+    // External dependencies and configurable settings
     [Header("Dependencias")]
     [SerializeField] private EmailManager emailManager;
-    [SerializeField] private float        gameDuration = 30f;  // debe coincidir con GameManager
+    [SerializeField] private float        gameDuration = 30f;
 
-    // ── Variables privadas ──────────────────────────────────────────────────
-    private int   _lastScore;
-    private int   _lastHits;
-    private float _lastAccuracy;
-    private int   _lastTime;
+    // Cached player data collected from the main menu
+    private string _nombre = "";
+    private string _email  = "";
 
-    // ── Unity ───────────────────────────────────────────────────────────────
+    // Visual feedback colors for email status
+    private readonly Color colorSending = new Color(1f,  0.8f, 0f);
+    private readonly Color colorSuccess = new Color(0.2f,0.9f, 0.4f);
+    private readonly Color colorError   = new Color(0.9f,0.2f, 0.2f);
 
     private void Start()
     {
-        // Botones
-        btnPlay?.onClick.AddListener(OnClickPlay);
-        btnSendEmail?.onClick.AddListener(OnClickSendEmail);
-        btnPlayAgain?.onClick.AddListener(OnClickPlayAgain);
-        btnMenu?.onClick.AddListener(OnClickMenu);
+        // Bind UI buttons to their respective actions
+        btnPlay?.onClick.AddListener(OnPlay);
+        btnPlayAgain?.onClick.AddListener(() => GameManager.Instance?.ReturnToMenu());
+        btnMenu?.onClick.AddListener(() => GameManager.Instance?.ReturnToMenu());
 
-        // Escuchar estados del email
+        // Subscribe to email sending status updates
         if (emailManager != null)
-            emailManager.OnStatusChanged += HandleEmailStatus;
+            emailManager.OnStatusChanged += OnEmailStatus;
 
+        // Ensure menu error is hidden on startup
+        txtMenuError?.gameObject.SetActive(false);
+
+        // Initialize in main menu state
         ShowMainMenu();
     }
 
-    // ── Llamados por GameManager ─────────────────────────────────────────────
+    /////////////// Main Menu Logic ///////////////////////////////////////////
+
+    private void OnPlay()
+    {
+        // Capture and sanitize user input
+        _nombre = inputName?.text?.Trim()  ?? "";
+        _email  = inputEmail?.text?.Trim() ?? "";
+
+        // Basic validation before starting the game
+        if (string.IsNullOrEmpty(_nombre))
+        { 
+            SetMenuError("Ingresa tu nombre."); 
+            return; 
+        }
+
+        if (!_email.Contains("@") || !_email.Contains("."))
+        { 
+            SetMenuError("Ingresa un correo válido."); 
+            return; 
+        }
+
+        // Clear error state and notify GameManager to start
+        txtMenuError?.gameObject.SetActive(false);
+        GameManager.Instance?.StartGame();
+    }
+
+    private void SetMenuError(string msg)
+    {
+        // Displays validation feedback in the main menu
+        if (txtMenuError == null) return;
+        txtMenuError.text = msg;
+        txtMenuError.gameObject.SetActive(true);
+    }
+
+    ////////////////// Methods Invoked by GameManager ////////////////////////////
 
     public void OnGameStarted()
     {
-        panelMainMenu?.SetActive(false);
+        // Transition UI to gameplay state
+        panelMenu?.SetActive(false);
         panelHUD?.SetActive(true);
         panelGameOver?.SetActive(false);
-        panelEmailStatus?.SetActive(false);
 
         UpdateScore(0);
         UpdateTimer(gameDuration);
@@ -89,105 +114,74 @@ public class UIManager : MonoBehaviour
 
     public void UpdateScore(int score)
     {
-        if (txtScore != null) txtScore.text = $"⭐ {score}";
+        // Updates live score display
+        if (txtScore != null) 
+            txtScore.text = $" {score}";
     }
 
-    public void UpdateTimer(float timeLeft)
+    public void UpdateTimer(float t)
     {
-        if (txtTimer    != null) txtTimer.text          = $"⏱ {Mathf.CeilToInt(timeLeft)}s";
-        if (timerSlider != null) timerSlider.value      = timeLeft / gameDuration;
+        // Updates both numeric timer and visual progress bar
+        if (txtTimer != null)    
+            txtTimer.text  = $" {Mathf.CeilToInt(t)}s";
+
+        if (timerSlider != null) 
+            timerSlider.value = t / gameDuration;
     }
 
     public void OnGameOver(int score, int hits, float accuracy, int elapsed)
     {
-        _lastScore    = score;
-        _lastHits     = hits;
-        _lastAccuracy = accuracy;
-        _lastTime     = elapsed;
-
+        // Transition UI to Game Over state
         panelHUD?.SetActive(false);
         panelGameOver?.SetActive(true);
-        panelEmailStatus?.SetActive(false);
 
+        // Display final statistics
         if (txtFinalScore != null) txtFinalScore.text = $"{score}";
         if (txtHits       != null) txtHits.text       = $"{hits} aciertos";
         if (txtAccuracy   != null) txtAccuracy.text   = $"{accuracy:F1}%";
         if (txtTime       != null) txtTime.text       = $"{elapsed}s";
 
-        // Pre-rellenar email si quedó guardado
-        if (inputEmail != null && inputEmail.text == "") inputEmail.text = "";
-        SetSendButtonInteractable(true);
+        // Trigger email result delivery
+        SetEmailStatus(" Enviando resultado a tu correo...", colorSending);
+        emailManager?.SendGameResult(_email, _nombre, score, hits, accuracy, elapsed);
     }
 
     public void ShowMainMenu()
     {
-        panelMainMenu?.SetActive(true);
+        // Restores UI to initial menu state
+        panelMenu?.SetActive(true);
         panelHUD?.SetActive(false);
         panelGameOver?.SetActive(false);
-        panelEmailStatus?.SetActive(false);
     }
 
-    // ── Botones ─────────────────────────────────────────────────────────────
+    /////////////// Email Status Handling ////////////////////////////////////////
 
-    private void OnClickPlay()
+    private void OnEmailStatus(EmailManager.SendStatus status, string error)
     {
-        GameManager.Instance?.StartGame();
-    }
-
-    private void OnClickSendEmail()
-    {
-        string email      = inputEmail?.text?.Trim() ?? "";
-        string playerName = inputPlayerName?.text?.Trim() ?? "Anónimo";
-
-        if (string.IsNullOrEmpty(email))
-        {
-            ShowStatus("⚠ Ingresa un correo destino.", colorError);
-            return;
-        }
-
-        SetSendButtonInteractable(false);
-        emailManager?.SendGameResult(email, playerName, _lastScore,
-                                     _lastHits, _lastAccuracy, _lastTime);
-    }
-
-    private void OnClickPlayAgain() => GameManager.Instance?.StartGame();
-    private void OnClickMenu()      => GameManager.Instance?.ReturnToMenu();
-
-    // ── Estado del email ─────────────────────────────────────────────────────
-
-    private void HandleEmailStatus(EmailManager.SendStatus status, string error)
-    {
+        // Reacts to asynchronous email sending state changes
         switch (status)
         {
             case EmailManager.SendStatus.Sending:
-                ShowStatus("📤 Enviando correo...", colorSending);
+                SetEmailStatus("Enviando resultado a el correo...", colorSending); 
                 break;
 
             case EmailManager.SendStatus.Success:
-                ShowStatus("✅ ¡Correo enviado correctamente!", colorSuccess);
-                SetSendButtonInteractable(false);   // ya enviado, evitar duplicados
+                SetEmailStatus($"Correo enviado a {_email}", colorSuccess);      
                 break;
 
             case EmailManager.SendStatus.Failed:
-                ShowStatus($"❌ Error: {error}", colorError);
-                SetSendButtonInteractable(true);    // permite reintentar
+                SetEmailStatus($"Error al enviar: {error}", colorError);           
                 break;
         }
     }
 
-    private void ShowStatus(string message, Color color)
+    private void SetEmailStatus(string msg, Color color)
     {
-        panelEmailStatus?.SetActive(true);
+        // Updates Game Over email feedback text and color
+        if (txtEmailStatus == null) return;
 
-        if (txtEmailStatus != null)
-        {
-            txtEmailStatus.text  = message;
-            txtEmailStatus.color = color;
-        }
-    }
-
-    private void SetSendButtonInteractable(bool value)
-    {
-        if (btnSendEmail != null) btnSendEmail.interactable = value;
+        txtEmailStatus.text  = msg;
+        txtEmailStatus.color = color;
+        txtEmailStatus.gameObject.SetActive(true);
     }
 }

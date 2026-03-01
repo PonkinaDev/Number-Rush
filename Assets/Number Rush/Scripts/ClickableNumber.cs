@@ -2,83 +2,78 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
-/// <summary>
-/// Adjunta este script al prefab del número.
-/// El prefab necesita: SpriteRenderer o Image de fondo + TextMeshPro + Collider2D.
-/// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class ClickableNumber : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI label;
-    [SerializeField] private SpriteRenderer bg;
+    [SerializeField] private SpriteRenderer bg;   // Background visual element
 
-    [Header("Colores")]
-    [SerializeField] private Color normalColor  = new Color(0.06f, 0.13f, 0.24f);
-    [SerializeField] private Color hitColor     = new Color(0.91f, 0.27f, 0.37f);
-    [SerializeField] private Color expiredColor = new Color(0.3f,  0.3f,  0.3f);
-
-    private int            _value;
-    private float          _lifetime;
-    private NumberSpawner  _spawner;
-    private bool           _clicked;
-    private Coroutine      _lifeCoroutine;
-
-    // ── Inicialización ──────────────────────────────────────────────────────
+    private NumberSpawner _spawner; // Reference to the spawner that created this object
+    private bool          _clicked; // Prevents multiple clicks
 
     public void Init(int value, float lifetime, NumberSpawner spawner)
     {
-        _value    = value;
-        _lifetime = lifetime;
-        _spawner  = spawner;
-        _clicked  = false;
+        _spawner = spawner;
+        _clicked = false;
 
-        if (label != null) label.text = value.ToString();
-        if (bg    != null) bg.color   = normalColor;
+        // Set displayed number
+        if (label != null)
+            label.text = value.ToString();
 
-        _lifeCoroutine = StartCoroutine(LifetimeCoroutine());
+        // Start lifetime countdown
+        StartCoroutine(LifetimeRoutine(lifetime));
     }
-
-    // ── Input ───────────────────────────────────────────────────────────────
 
     private void OnMouseDown()
     {
-        if (_clicked || GameManager.Instance?.State != GameManager.GameState.Playing) return;
+        // Ignore input if already clicked or game is not active
+        if (_clicked || GameManager.Instance?.State != GameManager.GameState.Playing)
+            return;
 
         _clicked = true;
-        StopCoroutine(_lifeCoroutine);
 
+        // Stop lifetime routine
+        StopAllCoroutines();
+
+        // Register successful hit
         GameManager.Instance.RegisterHit();
-        StartCoroutine(HitFeedback());
+
+        // Play hit feedback animation
+        StartCoroutine(HitAnimation());
     }
 
-    // ── Coroutines ──────────────────────────────────────────────────────────
-
-    private IEnumerator LifetimeCoroutine()
+    private IEnumerator LifetimeRoutine(float lifetime)
     {
-        float elapsed = 0f;
+        // Gradually fade background color over lifetime
+        Color start = bg != null ? bg.color : Color.white;
+        Color end   = new Color(0.3f, 0.3f, 0.3f);
 
-        while (elapsed < _lifetime)
+        float t = 0f;
+
+        while (t < lifetime)
         {
-            elapsed += Time.deltaTime;
+            t += Time.deltaTime;
 
-            // El fondo se va aclarando conforme pasa el tiempo (feedback visual)
-            float t = elapsed / _lifetime;
-            if (bg != null) bg.color = Color.Lerp(normalColor, expiredColor, t);
+            if (bg != null)
+                bg.color = Color.Lerp(start, end, t / lifetime);
 
             yield return null;
         }
 
-        // Número expirado sin ser clicado
+        // Notify spawner and destroy object if time expires
         _spawner?.OnNumberDestroyed();
         Destroy(gameObject);
     }
 
-    private IEnumerator HitFeedback()
+    private IEnumerator HitAnimation()
     {
-        if (bg != null) bg.color = hitColor;
+        // Change color to indicate successful click
+        if (bg != null)
+            bg.color = new Color(0.91f, 0.27f, 0.37f);
 
-        // Animación de escala
         float t = 0f;
+
+        // Scale-up animation for visual feedback
         while (t < 0.2f)
         {
             t += Time.deltaTime;
@@ -86,6 +81,7 @@ public class ClickableNumber : MonoBehaviour
             yield return null;
         }
 
+        // Notify spawner and destroy object after animation
         _spawner?.OnNumberDestroyed();
         Destroy(gameObject);
     }

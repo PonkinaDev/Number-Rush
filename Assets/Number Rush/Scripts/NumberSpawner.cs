@@ -3,69 +3,64 @@ using UnityEngine;
 
 public class NumberSpawner : MonoBehaviour
 {
-    [Header("Prefab del número clicable")]
-    [SerializeField] private ClickableNumber numberPrefab;
+    [Header("Prefab")]
+    [SerializeField] private ClickableNumber numberPrefab; // Prefab used to spawn numbers
 
-    [Header("Tiempo entre spawns (segundos)")]
-    [SerializeField] private float spawnInterval = 1.2f;
+    [Header("Spawn Settings")]
+    [SerializeField] private float spawnInterval   = 1.2f;  // Time between spawn attempts
+    [SerializeField] private float numberLifetime  = 2f;    // Lifetime of each number
+    [SerializeField] private int   maxSimultaneous = 4;     // Maximum numbers active at the same time
 
-    [Header("Tiempo de vida de cada número")]
-    [SerializeField] private float numberLifetime = 2f;
+    [Header("Spawn Area")]
+    [SerializeField] private Vector2 minBounds = new Vector2(-7f, -3.5f); // Minimum spawn position
+    [SerializeField] private Vector2 maxBounds = new Vector2( 7f,  3.5f); // Maximum spawn position
 
-    [Header("Máximos simultáneos en pantalla")]
-    [SerializeField] private int maxSimultaneous = 4;
-
-    [Header("Límites de la zona de juego (en unidades mundo)")]
-    [SerializeField] private Vector2 minBounds = new Vector2(-7f, -3.5f);
-    [SerializeField] private Vector2 maxBounds = new Vector2( 7f,  3.5f);
-
-    private Coroutine _spawnCoroutine;
-    private int       _activeCount;
+    private Coroutine _loop;   // Reference to the spawn coroutine
+    private int       _active; // Current number of active spawned objects
 
     public void StartSpawning()
     {
-        _activeCount = 0;
-        _spawnCoroutine = StartCoroutine(SpawnLoop());
+        _active = 0;           // Reset active counter
+        _loop   = StartCoroutine(SpawnLoop()); // Start spawn loop
     }
 
     public void StopSpawning()
     {
-        if (_spawnCoroutine != null)
-            StopCoroutine(_spawnCoroutine);
+        // Stop spawn loop if running
+        if (_loop != null) StopCoroutine(_loop);
 
-        // Destruir números que queden en pantalla
+        // Destroy all remaining spawned numbers
         foreach (var n in FindObjectsByType<ClickableNumber>(FindObjectsSortMode.None))
             Destroy(n.gameObject);
-
-        _activeCount = 0;
     }
 
-    public void OnNumberDestroyed() => _activeCount--;
-
-    // ── Privados ────────────────────────────────────────────────────────────
+    public void OnNumberDestroyed()
+    {
+        // Decrease active counter when a number is removed
+        _active--;
+    }
 
     private IEnumerator SpawnLoop()
     {
         while (true)
         {
-            if (_activeCount < maxSimultaneous)
-                SpawnNumber();
+            // Spawn only if below the maximum allowed
+            if (_active < maxSimultaneous)
+            {
+                // Generate random position within bounds
+                Vector2 pos = new Vector2(
+                    Random.Range(minBounds.x, maxBounds.x),
+                    Random.Range(minBounds.y, maxBounds.y));
 
+                // Instantiate and initialize number
+                var n = Instantiate(numberPrefab, pos, Quaternion.identity);
+                n.Init(Random.Range(1, 10), numberLifetime, this);
+
+                _active++;
+            }
+
+            // Wait before next spawn attempt
             yield return new WaitForSeconds(spawnInterval);
         }
-    }
-
-    private void SpawnNumber()
-    {
-        Vector2 pos = new Vector2(
-            Random.Range(minBounds.x, maxBounds.x),
-            Random.Range(minBounds.y, maxBounds.y)
-        );
-
-        int value = Random.Range(1, 10);    // número a mostrar (1-9)
-
-        ClickableNumber instance = Instantiate(numberPrefab, pos, Quaternion.identity);
-        instance.Init(value, numberLifetime, this);
-        _activeCount++;
     }
 }

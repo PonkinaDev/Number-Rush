@@ -1,101 +1,116 @@
 using UnityEngine;
-using UnityEngine.Events;
 
 public class GameManager : MonoBehaviour
 {
-    // ── Configuración ───────────────────────────────────────────────────────
-    [Header("Duración de partida (segundos)")]
-    [SerializeField] private float gameDuration = 30f;
+    [Header("Game Settings")]
+    [SerializeField] private float gameDuration  = 30f;   // Total duration of the game in seconds
+    [SerializeField] private int   pointsPerHit  = 10;    // Points awarded for each successful hit
 
-    [Header("Puntos por número clicado")]
-    [SerializeField] private int pointsPerHit = 10;
+    [Header("References")]
+    [SerializeField] private NumberSpawner spawner;       // Reference to the number spawner
+    [SerializeField] private UIManager     uiManager;     // Reference to the UI manager
 
-    // ── Referencias ─────────────────────────────────────────────────────────
-    [Header("Referencias")]
-    [SerializeField] private NumberSpawner spawner;
-    [SerializeField] private UIManager     uiManager;
+    // Singleton instance
+    public static GameManager Instance { get; private set; }
 
-    // ── Estado del juego ────────────────────────────────────────────────────
+    // Game states
     public enum GameState { MainMenu, Playing, GameOver }
     public GameState State { get; private set; } = GameState.MainMenu;
 
-    public int   Score        { get; private set; }
-    public int   HitCount     { get; private set; }   // clics acertados
-    public int   MissCount    { get; private set; }   // clics fallidos
-    public float TimeLeft     { get; private set; }
-    public float Accuracy     => (HitCount + MissCount) == 0 ? 100f
-                                 : (float)HitCount / (HitCount + MissCount) * 100f;
-    public int   ElapsedTime  => Mathf.RoundToInt(gameDuration - TimeLeft);
+    // Public read-only properties
+    public int   Score    { get; private set; }  // Current score
+    public int   Hits     { get; private set; }  // Total successful hits
+    public int   Misses   { get; private set; }  // Total missed attempts
+    public float TimeLeft { get; private set; }  // Remaining time
 
-    // ── Eventos Unity ───────────────────────────────────────────────────────
-    public UnityEvent OnGameStarted  = new UnityEvent();
-    public UnityEvent OnGameOver     = new UnityEvent();
-    public UnityEvent OnScoreChanged = new UnityEvent();
+    // Calculates accuracy percentage
+    public float Accuracy => (Hits + Misses) == 0 
+        ? 100f 
+        : (float)Hits / (Hits + Misses) * 100f;
 
-    // ── Singleton sencillo ──────────────────────────────────────────────────
-    public static GameManager Instance { get; private set; }
+    // Calculates elapsed time since the game started
+    public int ElapsedTime => Mathf.RoundToInt(gameDuration - TimeLeft);
 
     private void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        // Ensure only one instance of GameManager exists
+        if (Instance != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
     }
 
     private void Update()
     {
+        // Only update the timer if the game is currently playing
         if (State != GameState.Playing) return;
 
         TimeLeft -= Time.deltaTime;
+
+        // Update UI timer display
         uiManager?.UpdateTimer(TimeLeft);
 
+        // End the game if time runs out
         if (TimeLeft <= 0f)
             EndGame();
     }
 
-    // ── API pública ─────────────────────────────────────────────────────────
-
     public void StartGame()
     {
-        Score     = 0;
-        HitCount  = 0;
-        MissCount = 0;
-        TimeLeft  = gameDuration;
-        State     = GameState.Playing;
+        // Reset game values
+        Score    = 0;
+        Hits     = 0;
+        Misses   = 0;
+        TimeLeft = gameDuration;
 
-        OnGameStarted.Invoke();
+        // Change state to Playing
+        State = GameState.Playing;
+
+        // Start spawning numbers
         spawner?.StartSpawning();
+
+        // Notify UI that the game has started
         uiManager?.OnGameStarted();
     }
 
-    /// <summary>Llamado por ClickableNumber cuando el jugador acierta.</summary>
     public void RegisterHit()
     {
-        HitCount++;
+        // Increase hit count and score
+        Hits++;
         Score += pointsPerHit;
-        OnScoreChanged.Invoke();
+
+        // Update score in UI
         uiManager?.UpdateScore(Score);
     }
 
-    /// <summary>Llamado por la UI o área de juego cuando el jugador falla un clic.</summary>
     public void RegisterMiss()
     {
-        MissCount++;
+        // Increase miss count
+        Misses++;
     }
 
     public void ReturnToMenu()
     {
+        // Stop spawning and return to main menu
         spawner?.StopSpawning();
         State = GameState.MainMenu;
+
+        // Show main menu UI
         uiManager?.ShowMainMenu();
     }
 
-    // ── Privados ────────────────────────────────────────────────────────────
-
     private void EndGame()
     {
+        // Change state to GameOver
         State = GameState.GameOver;
+
+        // Stop spawning numbers
         spawner?.StopSpawning();
-        OnGameOver.Invoke();
-        uiManager?.OnGameOver(Score, HitCount, Accuracy, ElapsedTime);
+
+        // Send final results to UI
+        uiManager?.OnGameOver(Score, Hits, Accuracy, ElapsedTime);
     }
 }
